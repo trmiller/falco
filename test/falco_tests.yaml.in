@@ -1,4 +1,13 @@
 trace_files: !mux
+
+  debian_package:
+    package: falco*.deb
+    detect: True
+    detect_level: WARNING
+    rules_file:
+      - rules/rule_names_with_spaces.yaml
+    trace_file: trace_files/cat_write.scap
+
   builtin_rules_no_warnings:
     detect: False
     trace_file: trace_files/empty.scap

@@ -4,6 +4,7 @@ import os
 import re
 import json
 import sets
+import glob
 
 from avocado import Test
 from avocado.utils import process
@@ -89,13 +90,16 @@ class FalcoTest(Test):
             if not isinstance(self.detect_level, list):
                 self.detect_level = [self.detect_level]
 
-        # Doing this in 2 steps instead of simply using
-        # module_is_loaded to avoid logging lsmod output to the log.
-        lsmod_output = process.system_output("lsmod", verbose=False)
+        self.package = self.params.get('package', '*', default='None')
 
-        if linux_modules.parse_lsmod_for_module(lsmod_output, 'falco_probe') == {}:
-            self.log.debug("Loading falco kernel module")
-            process.run('sudo insmod {}/driver/falco-probe.ko'.format(self.falcodir))
+        if self.package == 'None':
+            # Doing this in 2 steps instead of simply using
+            # module_is_loaded to avoid logging lsmod output to the log.
+            lsmod_output = process.system_output("lsmod", verbose=False)
+
+            if linux_modules.parse_lsmod_for_module(lsmod_output, 'falco_probe') == {}:
+                self.log.debug("Loading falco kernel module")
+                process.run('sudo insmod {}/driver/falco-probe.ko'.format(self.falcodir))
 
         self.str_variant = self.trace_file
 
@@ -122,6 +126,10 @@ class FalcoTest(Test):
 
         if self.run_tags == '':
             self.run_tags=[]
+
+    def tearDown(self):
+        if self.package != 'None':
+            self.uninstall_package()
 
     def check_rules_warnings(self, res):
 
@@ -231,12 +239,45 @@ class FalcoTest(Test):
                         if not attr in obj:
                             self.fail("Falco JSON object {} does not contain property \"{}\"".format(line, attr))
 
+    def install_package(self):
+
+        package_glob = "{}/{}".format(self.falcodir, self.package)
+
+        matches = glob.glob(package_glob)
+
+        if len(matches) != 1:
+            self.fail("Package path {} did not match exactly 1 file. Instead it matched: {}", package_path_str, ",".join(matches))
+
+        self.package_path = matches[0]
+
+        if self.package_path.endswith(".deb"):
+            cmdline = "sudo dpkg -i {}".format(self.package_path)
+            self.log.debug("Installing debian package via \"{}\"".format(cmdline))
+            res = process.run(cmdline, timeout=120)
+            if res.exit_status != 0:
+                self.fail("Could not install debian package via \"{}\". stdout={}, stderr={}", cmdline, res.stdout, res.stderr)
+
+    def uninstall_package(self):
+
+        if self.package_path.endswith(".deb"):
+            cmdline = "sudo dpkg -r falco"
+            self.log.debug("Uninstalling debian package via \"{}\"".format(cmdline))
+            res = process.run(cmdline, timeout=120)
+            if res.exit_status != 0:
+                self.fail("Could not uninstall debian package via \"{}\". stdout={}, stderr={}", cmdline, res.stdout, res.stderr)
+
     def test(self):
         self.log.info("Trace file %s", self.trace_file)
 
+        basedir = '{}/userspace/falco/'.format(self.falcodir)
+
+        if self.package != 'None':
+            self.install_package()
+            basedir = '/usr/bin/';
+
         # Run the provided trace file though falco
-        cmd = '{}/userspace/falco/falco {} {} -c {} -e {} -o json_output={} -v'.format(
-            self.falcodir, self.rules_args, self.disabled_args, self.conf_file, self.trace_file, self.json_output)
+        cmd = '{}/falco {} {} -c {} -e {} -o json_output={} -v'.format(
+            basedir, self.rules_args, self.disabled_args, self.conf_file, self.trace_file, self.json_output)
 
         for tag in self.disable_tags:
             cmd += ' -T {}'.format(tag)
