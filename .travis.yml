@@ -2,6 +2,7 @@ language: c
 env:
     - BUILD_TYPE=Debug
     - BUILD_TYPE=Release
+sudo: required
 services:
     - docker
 before_install:
@@ -16,7 +17,7 @@ install:
     - curl -Lo avocado-36.0-tar.gz https://github.com/avocado-framework/avocado/archive/36.0lts.tar.gz
     - tar -zxvf avocado-36.0-tar.gz
     - cd avocado-36.0lts
-    - sudo pip install -r requirements-travis.txt
+    - sudo -H pip install -r requirements.txt
     - sudo python setup.py install
     - cd ../falco
 before_script:
