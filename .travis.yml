@@ -2,6 +2,9 @@ language: c
 env:
     - BUILD_TYPE=Debug
     - BUILD_TYPE=Release
+sudo: required
+services:
+    - docker
 before_install:
     - sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
     - sudo apt-get update
@@ -35,7 +38,10 @@ script:
     - cmake .. -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DDRAIOS_DEBUG_FLAGS="-D_DEBUG -DNDEBUG"
     - make VERBOSE=1
     - make package
-    - cd ..
+    - cp falco*.deb ../docker/local
+    - cd ../docker/local
+    - docker build -t sysdig/falco:test .
+    - cd ../..
     - sudo test/run_regression_tests.sh $TRAVIS_BRANCH
 notifications:
   webhooks:
